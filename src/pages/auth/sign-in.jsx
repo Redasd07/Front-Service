@@ -7,48 +7,51 @@ import axios from "axios";
 
 export function SignIn() {
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
-  const [modalData, setModalData] = useState({ isOpen: false, type: "", message: "" });
+  const [modalData, setModalData] = useState({ isOpen: false, type: "error", message: "" });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+
   };
 
-  const togglePasswordVisibility = () => {
-    setShowPassword((prevState) => !prevState);
-  };
+  const togglePasswordVisibility = () => setShowPassword((prev) => !prev);
 
   const handleSignIn = async (e) => {
     e.preventDefault();
     const { email, password } = formData;
 
     if (!email || !password) {
-      return setModalData({
-        isOpen: true,
-        type: "error",
-        message: "Please fill out all fields.",
-      });
+      setModalData({ isOpen: true, type: "error", message: "Please fill out all fields." });
+      return;
     }
 
     try {
       setLoading(true);
-      const response = await axios.post("http://localhost:8080/api/auth/login", formData);
 
-      if (response?.status === 202) {
+      const response = await axios.post("http://localhost:8080/api/auth/login", { email, password });
+
+      // Handle 2FA required case
+      if (response.status === 202 && response.data.verificationToken) {
         setModalData({
           isOpen: true,
           type: "info",
-          message: "An OTP has been sent to your email. Please verify to continue.",
+          message: "2FA is required. An OTP has been sent to your email. Please verify to continue.",
         });
+
         setTimeout(() => {
-          navigate("/auth/OTP-verification", { state: { email, context: "2fa" } });
+          navigate("/auth/OTP-verification", {
+            state: { email, verificationToken: response.data.verificationToken, context: "2fa" },
+          });
         }, 2000);
         return;
       }
 
+      // Successful login
       const { token, user } = response.data;
       localStorage.setItem("authToken", token);
       localStorage.setItem("role", user.role);
@@ -56,51 +59,56 @@ export function SignIn() {
       setModalData({
         isOpen: true,
         type: "success",
-        message: `Welcome back, ${user.nom}!`,
+        message: `Welcome back, ${user.firstName || "User"}!`,
       });
 
       setTimeout(() => {
-        if (user.role.toLowerCase() === "client") {
-          navigate("/client/scan-me");
-        } else {
-          navigate("/dashboard/home");
-        }
+        navigate(user.role.toLowerCase() === "client" ? "/client/client/scan-me" : "/dashboard/home");
       }, 2000);
-    } catch (err) {
-      const errorMessage = err.response?.data?.error;
+    } catch (error) {
+      console.error("Login Error:", error?.response?.data || error);
 
-      if (err.response?.status === 403 && errorMessage?.includes("Email is not verified")) {
-        // Handle unverified email
-        try {
-          await axios.post("http://localhost:8080/api/auth/resend-otp", null, {
-            params: { email, context: "verify-email" },
-          });
-
-          setModalData({
-            isOpen: true,
-            type: "info",
-            message: "Your email is not verified. An OTP has been sent to your email.",
-          });
-
-          setTimeout(() => {
-            navigate("/auth/OTP-verification", { state: { email, context: "verify-email" } });
-          }, 3000);
-        } catch (otpError) {
-          setModalData({
-            isOpen: true,
-            type: "error",
-            message: "Failed to send OTP. Please try again.",
-          });
-        }
-      } else if (err.response?.status === 401) {
-        // Handle invalid credentials
+      if (!error.response) {
         setModalData({
           isOpen: true,
           type: "error",
-          message: "Invalid email or password. Please try again.",
+          message: "Network error. Please check your connection and try again.",
         });
+        return;
+      }
+
+      const errorResponse = error.response;
+
+      if (errorResponse.status === 404) {
+        setModalData({
+          isOpen: true,
+          type: "error",
+          message: "User not found. Please check your email and try again.",
+        });
+      } else if (errorResponse.status === 401) {
+        setModalData({
+          isOpen: true,
+          type: "error",
+          message: "Incorrect email or password. Please try again.",
+        });
+      } else if (errorResponse.data?.error === "Email is not verified") {
+        setModalData({
+          isOpen: true,
+          type: "info",
+          message: "Your email is not verified. An OTP has been sent to your email.",
+        });
+      
+        setTimeout(() => {
+          navigate("/auth/OTP-verification", {
+            state: {
+              email,
+              context: "verify-email",
+              verificationToken: errorResponse.data.verificationToken, // Ajout du token ici
+            },
+          });
+        }, 3000);
+            
       } else {
-        // Handle other errors
         setModalData({
           isOpen: true,
           type: "error",
@@ -119,9 +127,9 @@ export function SignIn() {
     >
       <CustomModal
         isOpen={modalData.isOpen}
-        type={modalData.type}
+        type={modalData.type || "error"}
         message={modalData.message}
-        onClose={() => setModalData({ isOpen: false })}
+        onClose={() => setModalData({ ...modalData, isOpen: false })}
       />
       <Card className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
         <div className="flex justify-center mb-6">
@@ -150,8 +158,10 @@ export function SignIn() {
                 onChange={handleChange}
                 className="pl-10"
                 disabled={loading}
+                autoFocus
               />
             </div>
+            {errors.email && <span className="text-red-500 text-sm">{errors.email}</span>}
           </div>
 
           <div className="mb-6">
@@ -173,11 +183,12 @@ export function SignIn() {
               <button
                 type="button"
                 onClick={togglePasswordVisibility}
-                className="absolute top-3 right-3 text-gray-500"
+                className={`absolute top-3 right-3 ${showPassword ? "text-blue-500" : "text-gray-500"}`}
               >
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
               </button>
             </div>
+            {errors.password && <span className="text-red-500 text-sm">{errors.password}</span>}
           </div>
 
           <div className="text-right mb-6">
@@ -190,7 +201,7 @@ export function SignIn() {
           </div>
 
           <Button
-            className={`mt-4 bg-gray-900 text-white ${loading ? "opacity-50" : ""}`}
+            className={`mt-4 bg-gray-900 text-white ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
             fullWidth
             type="submit"
             disabled={loading}

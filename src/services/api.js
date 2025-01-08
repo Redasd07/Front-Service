@@ -8,96 +8,102 @@ const api = axios.create({
   },
 });
 
-// Login API
+// Request interceptor to inject token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("authToken");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
+// Response interceptor to handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      //alert("Session expired. Please log in again.");
+      //localStorage.removeItem("authToken");
+      //localStorage.removeItem("role");
+      //window.location.href = "/auth/sign-in";
+    }
+    return Promise.reject(error);
+  }
+);
+
+
 export const login = async (email, password) => {
   try {
     const response = await api.post("/auth/login", { email, password });
-    return response.data;
+    return response;
   } catch (error) {
-    throw error.response?.data || "Error during login.";
+    console.error("API Error:", error);
+
+    if (error.response) {
+      console.log("Error Response:", error.response);
+      throw error.response; // Renvoie l'objet entier pour plus de contexte
+    } else if (error.request) {
+      console.log("Network Error:", error.request);
+      throw { error: "Network error. Please check your connection." };
+    } else {
+      console.log("Unexpected Error:", error.message);
+      throw { error: "An unexpected error occurred. Please try again later." };
+    }
   }
 };
 
-// Register API
+
 export const register = async (userData) => {
+  const response = await api.post("/auth/register", userData);
+  return response.data;
+};
+
+export const verifyEmail = async (verificationToken, otpCode) => {
+  const response = await api.post("/auth/verify-email", { verificationToken, otpCode });
+  return response.data;
+};
+
+export const verifyOtp = async (verificationToken, otpCode) => {
+  const response = await api.post("/auth/verify-otp", { verificationToken, otpCode });
+  return response.data;
+};
+
+export const resendOtp = async (verificationToken, context) => {
   try {
-    const response = await api.post("/auth/register", userData);
-    return response.data;
+      const response = await api.post("/auth/resend-otp", { verificationToken, context });
+      console.log("Resend OTP - API Response:", response.data);
+      return response.data;
   } catch (error) {
-    throw error.response?.data || "Error during registration.";
+      console.error("Resend OTP - API Error:", error.response?.data || error);
+      throw error;
   }
 };
 
-// Verify Email API
-export const verifyEmail = async (email, otpCode) => {
-  try {
-    const response = await api.post("/auth/verify-email", { email, otpCode });
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || "Error during email verification.";
-  }
-};
 
-// Verify OTP for 2FA API
-export const verifyOtp = async (email, otpCode) => {
-  try {
-    const response = await api.post("/auth/verify-otp", null, {
-      params: { email, otpCode },
-    });
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || "Error during OTP verification.";
-  }
-};
-
-// Resend OTP API
-export const resendOtp = async (email, context) => {
-  try {
-    const response = await api.post("/auth/resend-otp", null, {
-      params: { email, context },
-    });
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || "Error during OTP resend.";
-  }
-};
-
-// Forgot Password API
 export const forgotPassword = async (email) => {
-  try {
-    const response = await api.post("/auth/forgot-password", null, {
-      params: { email },
-    });
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || "Error during forgot password.";
-  }
+  const response = await api.post("/auth/forgot-password", { email });
+  return response.data;
 };
 
-// Reset Password API
-export const resetPassword = async (token, newPassword, confirmNewPassword) => {
-  try {
-    const response = await api.post(
-      "/auth/reset-password",
-      { newPassword, confirmNewPassword },
-      {
-        params: { token },
-      }
-    );
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || "Error during reset password.";
-  }
+export const verifyResetOtp = async (verificationToken, otpCode) => {
+  const response = await api.post("/auth/verify-reset-otp", { verificationToken, otpCode });
+  return response.data;
 };
 
-// Get Current User API
+export const resetPassword = async (verificationToken, newPassword, confirmNewPassword) => {
+  const response = await api.post("/auth/reset-password", {
+    verificationToken,
+    newPassword,
+    confirmNewPassword,
+  });
+  return response.data;
+};
+
 export const getCurrentUser = async () => {
-  try {
-    const response = await api.get("/auth/me");
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || "Error fetching current user.";
-  }
+  const response = await api.get("/auth/me");
+  return response.data;
 };
 
 export default api;

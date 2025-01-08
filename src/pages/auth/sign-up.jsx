@@ -3,7 +3,7 @@ import { Input, Button, Typography, Card } from "@material-tailwind/react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEnvelope, FaUser, FaLock, FaPhone, FaEye, FaEyeSlash, FaSpinner } from "react-icons/fa";
 import CustomModal from "@/components/CustomModal";
-import axios from "axios";
+import { register } from "@/services/api";
 
 export function SignUp() {
   const [formData, setFormData] = useState({
@@ -16,7 +16,7 @@ export function SignUp() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [modalData, setModalData] = useState({ isOpen: false, type: "", message: "" });
+  const [modalData, setModalData] = useState({ isOpen: false, type: "error", message: "" });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const images = ["/img/1.jpg", "/img/2.jpg", "/img/3.jpg"];
@@ -95,20 +95,33 @@ export function SignUp() {
       setLoading(true);
 
       // API call to register the user
-      const response = await axios.post("http://localhost:8080/api/auth/register", formData);
+      const response = await register({
+        firstName: prenom,
+        lastName: nom,
+        email,
+        phone,
+        password,
+        confirmPassword,
+      });
 
       setModalData({
         isOpen: true,
         type: "success",
-        message: "Registration successful! Please check your email to verify your account.",
+        message: response.message || "Registration successful! Please check your email to verify your account.",
       });
 
       // Redirect to OTP verification after 2 seconds
       setTimeout(() => {
-        navigate("/auth/OTP-verification", { state: { email, context: "verify-email" } });
+        navigate("/auth/OTP-verification", {
+          state: {
+            email: formData.email,
+            verificationToken: response.verificationToken,
+            context: "verify-email",
+          },
+        });
       }, 2000);
     } catch (err) {
-      const errorMsg = err.response?.data || "An error occurred. Please try again.";
+      const errorMsg = err.response?.data?.error || "An error occurred. Please try again.";
       setModalData({
         isOpen: true,
         type: "error",
