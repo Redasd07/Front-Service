@@ -83,23 +83,54 @@ export const resendOtp = async (verificationToken, context) => {
 
 
 export const forgotPassword = async (email) => {
-  const response = await api.post("/auth/forgot-password", { email });
-  return response.data;
+  console.log("API Call: Forgot Password - Email:", email);
+  try {
+    const response = await api.post("/auth/forgot-password", { email });
+    console.log("Forgot Password API Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Forgot Password API Error:", error.response?.data || error.message);
+    throw error;
+  }
 };
+
 
 export const verifyResetOtp = async (verificationToken, otpCode) => {
-  const response = await api.post("/auth/verify-reset-otp", { verificationToken, otpCode });
-  return response.data;
+  console.log("API Call: Verify Reset OTP - Token:", verificationToken, "OTP:", otpCode);
+  try {
+    const response = await api.post("/auth/verify-reset-otp", { verificationToken, otpCode });
+    console.log("Verify Reset OTP API Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Verify Reset OTP API Error:", error.response?.data || error.message);
+    throw error;
+  }
 };
 
+
+
 export const resetPassword = async (verificationToken, newPassword, confirmNewPassword) => {
-  const response = await api.post("/auth/reset-password", {
+  console.log("Reset Password API Call:", {
     verificationToken,
     newPassword,
     confirmNewPassword,
   });
-  return response.data;
+
+  try {
+    const response = await api.post("/auth/reset-password", {
+      verificationToken,
+      newPassword,
+      confirmNewPassword,
+    });
+
+    console.log("Reset Password API Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Reset Password API Error:", error.response?.data || error.message);
+    throw error;
+  }
 };
+
 
 export const getCurrentUser = async () => {
   const response = await api.get("/auth/me");

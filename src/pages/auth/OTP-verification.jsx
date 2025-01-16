@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Button, Typography, Card } from "@material-tailwind/react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { verifyEmail, verifyOtp, resendOtp } from "@/services/api";
+import { verifyEmail, verifyOtp, resendOtp, verifyResetOtp } from "@/services/api";
 import CustomModal from "@/components/CustomModal";
-import { FaEnvelope, FaKey, FaLock } from "react-icons/fa";
+import { FaEnvelope, FaKey, FaLock, FaRedo } from "react-icons/fa";
 
 export function OTPVerification() {
   const [otp, setOtp] = useState(["", "", "", ""]);
@@ -35,17 +35,20 @@ export function OTPVerification() {
       icon: <FaKey className="text-6xl text-green-500 mb-4 animate-pulse" />,
       apiFunction: verifyOtp,
       onSuccessMessage: "2FA completed successfully! Redirecting...",
-      onSuccessRedirect: (role) => (role === "client" ? "/client/client/scan-me" : "/dashboard/home"),
+      onSuccessRedirect: (role) =>
+        role === "client" ? "/client/client/scan-me" : "/dashboard/home",
     },
-    "verify-reset-otp": {
+    "reset-password": {
       title: "Verify Your Reset Code",
       description: "Enter the 4-digit code sent to your email to reset your password.",
-      icon: <FaLock className="text-6xl text-red-500 mb-4 animate-pulse" />,
-      apiFunction: verifyOtp,
+      icon: <FaRedo  className="text-6xl text-green-500 mb-4 animate-pulse" />,
+      apiFunction: verifyResetOtp, // Appelle la bonne API pour la réinitialisation
       onSuccessMessage: "OTP verified successfully! Proceeding to reset password...",
       onSuccessRedirect: "/auth/reset-password",
     },
+
   };
+  
 
   // Handle OTP input
   const handleChange = (index, value) => {
@@ -71,69 +74,24 @@ export function OTPVerification() {
 
   // Handle OTP verification
   const handleVerify = async () => {
+    console.log("handleVerify - Function Started");
     try {
       setLoading(true);
       setModalData({ isOpen: false });
-
+  
       const otpCode = otp.join("");
+      console.log("handleVerify - OTP Code:", otpCode);
+  
       if (otpCode.length < 4) {
+        console.error("handleVerify - OTP Code is incomplete:", otpCode);
         throw new Error("Please fill in all OTP fields.");
       }
-
-      const { apiFunction, onSuccessMessage, onSuccessRedirect } = contextData[context];
-
-      // Call the appropriate API function
-      await apiFunction(verificationToken, otpCode);
-
-      setModalData({
-        isOpen: true,
-        type: "success",
-        message: onSuccessMessage,
-      });
-
-      // Redirect based on context
-      setTimeout(() => {
-        if (typeof onSuccessRedirect === "function") {
-          navigate(onSuccessRedirect(location.state?.role || "client"));
-        } else {
-          navigate(onSuccessRedirect);
-        }
-      }, 2000);
-    } catch (err) {
-      setModalData({
-        isOpen: true,
-        type: "error",
-        message: err.response?.data?.error || "Invalid OTP. Please try again.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResend = async () => {
-    console.log("Resend OTP - Function Started");
   
-    try {
-      setLoading(true);
-      setModalData({ isOpen: false });
+      const contextDetails = contextData[context];
+      console.log("handleVerify - Context Details:", contextDetails);
   
-      console.log("Resend OTP - Context Received:", context);
-      console.log("Resend OTP - Verification Token Received:", verificationToken);
-  
-      // Mapping des contextes attendus par le backend
-      const contextMapping = {
-        "verify-email": "EMAIL_VERIFICATION",
-        "reset-password": "RESET_PASSWORD",
-        "2fa": "2FA",
-      };
-  
-      // Récupérez le contexte formaté
-      const formattedContext = contextMapping[context];
-      console.log("Resend OTP - Mapped Context:", formattedContext);
-  
-      // Vérifiez si le contexte est valide
-      if (!formattedContext) {
-        console.error("Resend OTP - Invalid Context:", context);
+      if (!contextDetails) {
+        console.error("handleVerify - Invalid Context:", context);
         setModalData({
           isOpen: true,
           type: "error",
@@ -142,12 +100,81 @@ export function OTPVerification() {
         return;
       }
   
-      console.log("Resend OTP - Calling API with Context:", formattedContext);
+      console.log("handleVerify - API Function:", contextDetails.apiFunction.name);
+      console.log("handleVerify - Calling API with data:", {
+        verificationToken,
+        otpCode,
+      });
   
-      // Appel à l'API
+      // Appel de l'API
+      const response = await contextDetails.apiFunction(verificationToken, otpCode);
+      console.log("handleVerify - API Response:", response);
+  
+      setModalData({
+        isOpen: true,
+        type: "success",
+        message: contextDetails.onSuccessMessage,
+      });
+  
+      console.log("handleVerify - Redirecting in 2 seconds...");
+  
+      setTimeout(() => {
+        if (typeof contextDetails.onSuccessRedirect === "function") {
+          const redirectPath = contextDetails.onSuccessRedirect(location.state?.role || "client");
+          navigate(redirectPath, {
+            state: { verificationToken }, // Pass the token to ResetPassword
+          });
+        } else {
+          navigate(contextDetails.onSuccessRedirect, {
+            state: { verificationToken }, // Pass the token to ResetPassword
+          });
+        }
+      }, 2000);
+      
+    } catch (err) {
+      console.error("handleVerify - Error:", err);
+  
+      setModalData({
+        isOpen: true,
+        type: "error",
+        message: err.response?.data?.error || "Invalid OTP. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+      console.log("handleVerify - Function Ended");
+    }
+  };
+  
+  
+  // Handle resend OTP
+  const handleResend = async () => {
+    try {
+      setLoading(true);
+      setModalData({ isOpen: false });
+  
+      const contextMapping = {
+        "verify-email": "EMAIL_VERIFICATION",
+        "reset-password": "RESET_PASSWORD",
+        "2fa": "2FA",
+        "verify-reset-otp": "RESET_PASSWORD", // Ajout du mapping pour reset-password
+      };
+  
+      const formattedContext = contextMapping[context];
+      if (!formattedContext) {
+        console.error("Invalid context:", context);
+        setModalData({
+          isOpen: true,
+          type: "error",
+          message: `Invalid context: ${context}. Please try again.`,
+        });
+        return;
+      }
+  
+      console.log("Calling Resend OTP API with:", { verificationToken, formattedContext });
+  
       const response = await resendOtp(verificationToken, formattedContext);
   
-      console.log("Resend OTP - API Response:", response);
+      console.log("Resend OTP Response:", response);
   
       setModalData({
         isOpen: true,
@@ -155,20 +182,10 @@ export function OTPVerification() {
         message: "A new OTP has been sent to your email.",
       });
   
-      console.log("Resend OTP - Success: New OTP sent.");
-      setCountdown(300); // Réinitialisation du compteur à 5 minutes
-      setResendCountdown(30); // Réinitialisation du délai pour cliquer à nouveau
+      setCountdown(300); // Réinitialisation du compteur
+      setResendCountdown(30); // Délais avant réactivation du bouton
     } catch (err) {
-      console.error("Resend OTP - Error:", err);
-  
-      if (err.response) {
-        console.error("Resend OTP - Error Response Data:", err.response.data);
-        console.error("Resend OTP - Error Response Status:", err.response.status);
-      } else if (err.request) {
-        console.error("Resend OTP - No Response from Server:", err.request);
-      } else {
-        console.error("Resend OTP - Unexpected Error:", err.message);
-      }
+      console.error("Resend OTP Error:", err);
   
       setModalData({
         isOpen: true,
@@ -177,12 +194,10 @@ export function OTPVerification() {
       });
     } finally {
       setLoading(false);
-      console.log("Resend OTP - Function Ended");
     }
   };
   
-  
-  
+
   // Countdown timer
   React.useEffect(() => {
     if (countdown > 0) {
